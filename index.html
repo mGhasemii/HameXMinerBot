@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram Coin Mini App</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin-top: 50px;
+        }
+        #coin-button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>Welcome to the HameX Coin Minig App</h1>
+    <p>Press the button to earn coins!</p>
+    <button id="coin-button">Get Coin</button>
+    <p id="coin-count">Coins: 0</p>
+
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script>
+        let coinCount = 0;
+
+        document.getElementById('coin-button').addEventListener('click', () => {
+            coinCount++;
+            document.getElementById('coin-count').textContent = 'Coins: ' + coinCount;
+
+            // Send data to Telegram server
+            Telegram.WebApp.sendData(JSON.stringify({ coins: coinCount }));
+        });
+
+        Telegram.WebApp.ready();
+    </script>
+</body>
+</html>
