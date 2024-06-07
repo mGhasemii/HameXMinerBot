@@ -2,33 +2,214 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>python-telegram-bot Example WebApp</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title></title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@jaames/iro@5"></script>
-</head>
-<script type="text/javascript">
-    const colorPicker = new iro.ColorPicker('#picker', {
-        borderColor: "#ffffff",
-        borderWidth: 1,
-        width: Math.round(document.documentElement.clientWidth / 2),
-    });
-    colorPicker.on('color:change', function (color) {
-        document.body.style.background = color.hexString;
-    });
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #000;
+        }
 
-    Telegram.WebApp.ready();
-    Telegram.WebApp.MainButton.setText('Choose Color').show().onClick(function () {
-        const data = JSON.stringify({hex: colorPicker.color.hexString, rgb: colorPicker.color.rgb});
-        Telegram.WebApp.sendData(data);
-        Telegram.WebApp.close();
-    });
-</script>
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<!--<script type="text/javascript">-->
+<!--    const colorPicker = new iro.ColorPicker('#picker', {-->
+<!--        borderColor: "#ffffff",-->
+<!--        borderWidth: 1,-->
+<!--        width: Math.round(document.documentElement.clientWidth / 2),-->
+<!--    });-->
+<!--    colorPicker.on('color:change', function (color) {-->
+<!--        document.body.style.background = color.hexString;-->
+<!--    });-->
+
+<!--    Telegram.WebApp.ready();-->
+<!--    Telegram.WebApp.MainButton.setText('Choose Color').show().onClick(function () {-->
+<!--        const data = JSON.stringify({hex: colorPicker.color.hexString, rgb: colorPicker.color.rgb});-->
+<!--        Telegram.WebApp.sendData(data);-->
+<!--        Telegram.WebApp.close();-->
+<!--    });-->
+<!--</script>-->
 <body style="background-color: #ffffff">
-<div style="position: absolute; margin-top: 5vh; margin-left: 5vw; height: 90vh; width: 90vw; border-radius: 5vh; background-color: var(--tg-theme-bg-color); box-shadow: 0 0 2vw
- #000000;">
-    <div id="picker"
-         style="display: flex; justify-content: center; align-items: center; height: 100%; width: 100%"></div>
-</div>
+<canvas id="glcanvas"></canvas>
+<script>
+    const canvas = document.getElementById("glcanvas");
+    const gl = canvas.getContext("webgl");
+
+    const ballRadius = 0.05;
+    let ballPosition = [0.0, 0.0];
+    let ballVelocity = [0.01, 0.01];
+
+    // Vertex shader program
+    const vsSource = `
+            attribute vec4 aVertexPosition;
+            uniform vec2 uTranslation;
+            void main(void) {
+                gl_Position = vec4(aVertexPosition.xy + uTranslation, 0.0, 1.0);
+            }
+        `;
+
+    // Fragment shader program
+    const fsSource = `
+            void main(void) {
+                gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);  // white
+            }
+        `;
+
+    // Initialize a shader program
+    const shaderProgram = initShaderProgram(gl, vsSource, fsSource);
+    const programInfo = {
+        program: shaderProgram,
+        attribLocations: {
+            vertexPosition: gl.getAttribLocation(shaderProgram, 'aVertexPosition'),
+        },
+        uniformLocations: {
+            translation: gl.getUniformLocation(shaderProgram, 'uTranslation'),
+        },
+    };
+
+    // Buffer to hold the ball's vertices
+    const buffers = initBuffers(gl);
+
+    function initShaderProgram(gl, vsSource, fsSource) {
+        const vertexShader = loadShader(gl, gl.VERTEX_SHADER, vsSource);
+        const fragmentShader = loadShader(gl, gl.FRAGMENT_SHADER, fsSource);
+
+        const shaderProgram = gl.createProgram();
+        gl.attachShader(shaderProgram, vertexShader);
+        gl.attachShader(shaderProgram, fragmentShader);
+        gl.linkProgram(shaderProgram);
+
+        if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+            console.error('Unable to initialize the shader program:', gl.getProgramInfoLog(shaderProgram));
+            return null;
+        }
+
+        return shaderProgram;
+    }
+
+    function loadShader(gl, type, source) {
+        const shader = gl.createShader(type);
+
+        gl.shaderSource(shader, source);
+        gl.compileShader(shader);
+
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+            console.error('An error occurred compiling the shaders:', gl.getShaderInfoLog(shader));
+            gl.deleteShader(shader);
+            return null;
+        }
+
+        return shader;
+    }
+
+    function initBuffers(gl) {
+        const positionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+
+        const vertices = new Float32Array(360 * 2);
+        for (let i = 0; i < 360; i++) {
+            const theta = i * Math.PI / 180;
+            vertices[i * 2] = ballRadius * Math.cos(theta);
+            vertices[i * 2 + 1] = ballRadius * Math.sin(theta);
+        }
+
+        gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+
+        return {
+            position: positionBuffer,
+        };
+    }
+
+    function drawScene(gl, programInfo, buffers) {
+        gl.clear(gl.COLOR_BUFFER_BIT);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffers.position);
+
+        gl.vertexAttribPointer(
+            programInfo.attribLocations.vertexPosition,
+            2,  // numComponents
+            gl.FLOAT,  // type
+            false,  // normalize
+            0,  // stride
+            0  // offset
+        );
+        gl.enableVertexAttribArray(programInfo.attribLocations.vertexPosition);
+
+        gl.useProgram(programInfo.program);
+
+        gl.uniform2fv(programInfo.uniformLocations.translation, ballPosition);
+
+        const numVertices = 360;
+        gl.drawArrays(gl.TRIANGLE_FAN, 0, numVertices);
+    }
+
+    function update() {
+        ballPosition[0] += ballVelocity[0];
+        ballPosition[1] += ballVelocity[1];
+
+        if (ballPosition[0] + ballRadius > 1.0 || ballPosition[0] - ballRadius < -1.0) {
+            ballVelocity[0] = -ballVelocity[0];
+        }
+
+        if (ballPosition[1] + ballRadius > 1.0 || ballPosition[1] - ballRadius < -1.0) {
+            ballVelocity[1] = -ballVelocity[1];
+        }
+    }
+
+    function render() {
+        gl.clear(gl.COLOR_BUFFER_BIT);
+
+        gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+
+        gl.uniform2fv(programInfo.uniformLocations.translation, ballPosition);
+
+        drawScene(gl, programInfo, buffers);
+
+        update();
+
+        requestAnimationFrame(render);
+    }
+
+    function resizeCanvas() {
+        const displayWidth = canvas.clientWidth;
+        const displayHeight = canvas.clientHeight;
+
+        if (canvas.width != displayWidth || canvas.height != displayHeight) {
+            canvas.width = displayWidth;
+            canvas.height = displayHeight;
+            gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+        }
+    }
+
+    function handleClickOrTouch(event) {
+        event.preventDefault();
+        ballVelocity[1] = -ballVelocity[1];
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+    canvas.addEventListener('click', handleClickOrTouch);
+    canvas.addEventListener('touchstart', handleClickOrTouch);
+
+    gl.clearColor(0.0, 0.0, 0.0, 1.0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    gl.useProgram(programInfo.program);
+
+    resizeCanvas();
+    render();
+</script>
 </body>
 <script type="text/javascript">
     Telegram.WebApp.expand();
